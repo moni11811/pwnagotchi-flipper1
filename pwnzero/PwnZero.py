@@ -85,9 +85,11 @@ class PwnZero(plugins.Plugin):
         self._baud = baud
 
         try:
+            # open serial connection to Flipper Zero
             self._serialConn = serial.Serial(port, baud)
-        except:
-            raise "Cannot bind to port ({}) with baud ({})".format(port, baud)
+        except Exception as e:
+            # propagate as runtime error for plugin loader
+            raise RuntimeError(f"Cannot bind to port {port} with baud {baud}: {e}")
 
     def close(self):
         """
@@ -142,8 +144,10 @@ class PwnZero(plugins.Plugin):
         
         data.append(self.PROTOCOL_END)
 
-        # Send data to flipper
-        return self._serialConn.write(data) == len(data)
+        # Send data to flipper as bytes
+        data_bytes = bytes(data)
+        written = self._serialConn.write(data_bytes)
+        return written == len(data_bytes)
 
     # Public method commands
     def set_face(self, face: PwnFace) -> bool:
@@ -237,91 +241,86 @@ class PwnZero(plugins.Plugin):
         pass
 
     def on_ui_update(self, ui):
-        # Message
-        self.set_message(ui.get('status'))
+        # Status message
+        status = ui.get('status')
+        if status is not None:
+            self.set_message(str(status))
 
-        # Mode
-        modeEnum = None
-        if ui.get('mode') == 'AI':
-            modeEnum = PwnMode.AI
-        elif ui.get('mode') == 'MANU':
-            modeEnum = PwnMode.MANU
-        elif ui.get('mode') == 'AUTO':
-            modeEnum = PwnMode.AUTO
-        self.set_mode(modeEnum)
+        # Mode mapping
+        mode_str = ui.get('mode')
+        if isinstance(mode_str, str):
+            mode_key = mode_str.upper()
+        else:
+            mode_key = None
+        mode_mapping = {
+            'AI': PwnMode.AI,
+            'AUTO': PwnMode.AUTO,
+            'MANUAL': PwnMode.MANU,
+            'MANU': PwnMode.MANU,
+        }
+        mode = mode_mapping.get(mode_key)
+        if mode:
+            self.set_mode(mode)
 
         # Channel
         channel = ui.get('channel')
-        self.set_channel(channel)
+        if channel is not None:
+            self.set_channel(str(channel))
 
         # Uptime
         uptime = ui.get('uptime')
-        self.set_uptime(uptime)
+        if uptime is not None:
+            self.set_uptime(str(uptime))
 
-        # APS
+        # APS (could be tuple or string)
         aps = ui.get('aps')
-        self.set_aps(aps)
-        
-        # name
-        self.set_name(ui.get('name').replace(">", ""))
+        if isinstance(aps, (tuple, list)) and len(aps) >= 2:
+            aps_str = f"{aps[0]} ({aps[1]})"
+        else:
+            aps_str = str(aps) if aps is not None else ''
+        self.set_aps(aps_str)
 
-        # Face
+        # Name (sanitize > char)
+        name = ui.get('name')
+        if name is not None:
+            self.set_name(str(name).replace('>', ''))
+
+        # Face mapping (fallback to default face)
         face = ui.get('face')
-        
-        faceEnum = None
-        if face == faces.LOOK_R:
-            faceEnum = PwnFace.LOOK_R
-        elif face == faces.LOOK_L:
-            faceEnum = PwnFace.LOOK_L
-        elif face == faces.LOOK_R_HAPPY:
-            faceEnum = PwnFace.LOOK_R_HAPPY
-        elif face == faces.LOOK_L_HAPPY:
-            faceEnum = PwnFace.LOOK_L_HAPPY
-        elif face == faces.SLEEP:
-            faceEnum = PwnFace.SLEEP
-        elif face == faces.SLEEP2:
-            faceEnum = PwnFace.SLEEP2
-        elif face == faces.AWAKE:
-            faceEnum = PwnFace.AWAKE
-        elif face == faces.BORED:
-            faceEnum = PwnFace.BORED
-        elif face == faces.INTENSE:
-            faceEnum = PwnFace.INTENSE
-        elif face == faces.COOL:
-            faceEnum = PwnFace.COOL
-        elif face == faces.HAPPY:
-            faceEnum = PwnFace.HAPPY
-        elif face == faces.GRATEFUL:
-            faceEnum = PwnFace.GRATEFUL
-        elif face == faces.EXCITED:
-            faceEnum = PwnFace.EXCITED
-        elif face == faces.MOTIVATED:
-            faceEnum = PwnFace.MOTIVATED
-        elif face == faces.DEMOTIVATED:
-            faceEnum = PwnFace.DEMOTIVATED
-        elif face == faces.SMART:
-            faceEnum = PwnFace.SMART
-        elif face == faces.LONELY:
-            faceEnum = PwnFace.LONELY
-        elif face == faces.SAD:
-            faceEnum = PwnFace.SAD
-        elif face == faces.ANGRY:
-            faceEnum = PwnFace.ANGRY
-        elif face == faces.FRIEND:
-            faceEnum = PwnFace.FRIEND
-        elif face == faces.BROKEN:
-            faceEnum = PwnFace.BROKEN
-        elif face == faces.DEBUG:
-            faceEnum = PwnFace.DEBUG
-        elif face == faces.UPLOAD:
-            faceEnum = PwnFace.UPLOAD
-        elif face == faces.UPLOAD1:
-            faceEnum = PwnFace.UPLOAD1
-        elif face == faces.UPLOAD2:
-            faceEnum = PwnFace.UPLOAD2
+        face_mapping = {
+            faces.LOOK_R: PwnFace.LOOK_R,
+            faces.LOOK_L: PwnFace.LOOK_L,
+            faces.LOOK_R_HAPPY: PwnFace.LOOK_R_HAPPY,
+            faces.LOOK_L_HAPPY: PwnFace.LOOK_L_HAPPY,
+            faces.SLEEP: PwnFace.SLEEP,
+            faces.SLEEP2: PwnFace.SLEEP2,
+            faces.AWAKE: PwnFace.AWAKE,
+            faces.BORED: PwnFace.BORED,
+            faces.INTENSE: PwnFace.INTENSE,
+            faces.COOL: PwnFace.COOL,
+            faces.HAPPY: PwnFace.HAPPY,
+            faces.GRATEFUL: PwnFace.GRATEFUL,
+            faces.EXCITED: PwnFace.EXCITED,
+            faces.MOTIVATED: PwnFace.MOTIVATED,
+            faces.DEMOTIVATED: PwnFace.DEMOTIVATED,
+            faces.SMART: PwnFace.SMART,
+            faces.LONELY: PwnFace.LONELY,
+            faces.SAD: PwnFace.SAD,
+            faces.ANGRY: PwnFace.ANGRY,
+            faces.FRIEND: PwnFace.FRIEND,
+            faces.BROKEN: PwnFace.BROKEN,
+            faces.DEBUG: PwnFace.DEBUG,
+            faces.UPLOAD: PwnFace.UPLOAD,
+            faces.UPLOAD1: PwnFace.UPLOAD1,
+            faces.UPLOAD2: PwnFace.UPLOAD2,
+        }
+        face_enum = face_mapping.get(face, PwnFace.DEFAULT_FACE)
+        self.set_face(face_enum)
 
-        self.set_face(faceEnum)
-
-        # Handshakes
-        handshakes = ui.get('shakes')
-        self.set_handshakes(handshakes)
+        # Handshakes (could be tuple or string)
+        shakes = ui.get('shakes')
+        if isinstance(shakes, (tuple, list)) and len(shakes) >= 2:
+            shakes_str = f"{shakes[0]} ({shakes[1]})"
+        else:
+            shakes_str = str(shakes) if shakes is not None else ''
+        self.set_handshakes(shakes_str)
